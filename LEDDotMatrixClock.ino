@@ -28,6 +28,21 @@ const byte FONT_WIDTH = 5 + SPACER; // The font width is 5 pixels
 int waktu = 0; 
 float suhu;
 
+struct Alarm {
+  bool active;
+  byte hours;
+  byte minutes;
+  byte duration; // duration in seconds
+};
+
+Alarm alarms[] = {
+  { false },
+  { false },
+  { false },
+  { false },
+  { false }
+};
+
 unsigned long intensityThrottle = 0;
 byte ledIntensity = 0;
 
@@ -42,17 +57,21 @@ A_STATE alarm_state;
 
 String inputAlarmHours = "__";
 String inputAlarmMinutes = "__";
+byte inputAlarmDuration = 0;
 byte inputtedAlarm = 0;
 
+byte activeAlarm = 0;
+unsigned long alarmStartTime = 0;
+
+String NRP_TIA = "07211940000017";
+String NAMA_TIA = "Adritia Alfiana Merdila";
+
 void adjustClock(String data) {
-	// byte _day = data.substring(0,2).toInt();
-	// byte _month = data.substring(3,5).toInt();
-	// int _year = data.substring(6,10).toInt();
 	byte _hour = data.substring(0,2).toInt();
 	byte _min = data.substring(3,5).toInt();
 	byte _sec = data.substring(6,8).toInt();
 	rtc.setTime(_hour, _min, _sec);
-	// rtc.setDate(_day, _month, _year);
+
 	Serial.println(F(">> Time successfully set!"));
 }
 
@@ -97,6 +116,7 @@ void resetAlarmInput() {
   inputtedAlarm = 0;
   inputAlarmHours = "__";
   inputAlarmMinutes = "__";
+  inputAlarmDuration = 0;
 }
 
 void setup() {
@@ -105,7 +125,6 @@ void setup() {
 	Serial.begin(9600);
 	Serial.println(F(">> Arduino 32x8 LED Dot Matrix Clock!"));
 	Serial.println(F(">> Use <hh:mm:ss> format to set clock's and hour!"));
-  Serial.println("Keyboard Test:");
 	rtc.begin();
 	matrix.setPosition(0, 0, 0);
 	matrix.setPosition(1, 1, 0);
@@ -120,19 +139,19 @@ void setup() {
 }
 
 void printMatrix(String output, int i) {
-    i = i == -1 ? (FONT_WIDTH * output.length() + matrix.width() - 1 - SPACER) / 2 : i; // kalo mau print center i nya kasih -1
-    int letter = i / FONT_WIDTH;
-    int x = (matrix.width() - 1) - i % FONT_WIDTH;
-    int y = (matrix.height() - 8) / 2; // center the text vertically
+  i = i == -1 ? (FONT_WIDTH * output.length() + matrix.width() - 1 - SPACER) / 2 : i; // kalo mau print center i nya kasih -1
+  int letter = i / FONT_WIDTH;
+  int x = (matrix.width() - 1) - i % FONT_WIDTH;
+  int y = (matrix.height() - 8) / 2; // center the text vertically
 
-    while ( x + FONT_WIDTH - SPACER >= 0 && letter >= 0 ) {
-      if ( letter < output.length() ) {
-        matrix.drawChar(x, y, output[letter], HIGH, LOW, 1);
-      }
-      letter--;
-      x -= FONT_WIDTH;
+  while ( x + FONT_WIDTH - SPACER >= 0 && letter >= 0 ) {
+    if ( letter < output.length() ) {
+      matrix.drawChar(x, y, output[letter], HIGH, LOW, 1);
     }
-    matrix.write();
+    --letter;
+    x -= FONT_WIDTH;
+  }
+  matrix.write();
 }
 
 void runningMatrix() {
@@ -146,6 +165,32 @@ void runningMatrix() {
     case STATE::SUHU:
       output = outputStrTemp();
       break;
+    case STATE::ALARM_ACTIVE:
+      if (millis() - alarmStartTime > alarms[activeAlarm].duration * 1000) {
+        alarms[activeAlarm].active = false;
+        program_state = STATE::WAKTU;
+        return;
+      } else {
+        switch (activeAlarm) {
+          case 0:
+            output = NRP_TIA;
+            break;
+          case 1:
+            output = NAMA_TIA;
+            break;
+          case 2:
+            output = NAMA_TIA + " ";
+            output += NRP_TIA;
+            break;
+          case 3:
+            output = String(millis() / 1000) + " s";
+            break;
+          case 4:
+            output = "I love Tia";
+            break;
+        }
+      }
+      break;
     default:
       return;
   }
@@ -158,6 +203,9 @@ void runningMatrix() {
     int y = (matrix.height() - 8) / 2; // center the text vertically
     printMatrix(output, i);
     detik = rtc.getTime().sec;
+    byte menit = rtc.getTime().min;
+    byte jam = rtc.getTime().hour;
+
     if (prevState != program_state) {
       matrix.fillScreen(LOW);
       return;
@@ -167,6 +215,15 @@ void runningMatrix() {
     } else {
       program_state = STATE::WAKTU;
     }
+
+    for (byte j = 0; j < 5; ++j) {
+      if (alarms[j].hours == jam && alarms[j].minutes == menit && alarms[j].active) {
+        program_state = STATE::ALARM_ACTIVE;
+        activeAlarm = j;
+        alarmStartTime = millis();
+      }
+    }
+
     if (prevState != program_state) {
       matrix.fillScreen(LOW);
       return;
@@ -185,6 +242,7 @@ void loop() {
   switch (program_state) {
     case STATE::WAKTU:
     case STATE::SUHU:
+    case STATE::ALARM_ACTIVE:
       runningMatrix();
       break;
     case STATE::MENU:
@@ -220,6 +278,9 @@ void loop() {
       break;
     case STATE::SET_ALARM:
       printMatrix(inputAlarmHours + ":" + inputAlarmMinutes, -1);
+      break;
+    case STATE::SET_DUR:
+      printMatrix(String(inputAlarmDuration) + " s", -1);
       break;
   }
 
@@ -304,14 +365,90 @@ void keyboardHandler() {
       break;
     case STATE::SET_ALARM:
       if (key == PS2_ESC) {
-        program_state == STATE::SELECT_ALARM;
+        program_state = STATE::SELECT_ALARM;
         resetAlarmInput();
       } else if (key >= '0' && key <= '9') {
         switch (inputtedAlarm) {
           case 0:
             inputAlarmHours = String(key) + String(inputAlarmHours[1]);
             ++inputtedAlarm;
-            break;    
+            break;
+          case 1:
+            inputAlarmHours = String(inputAlarmHours[0]) + String(key);
+            ++inputtedAlarm;
+            break;
+          case 2:
+            inputAlarmMinutes = String(key) + String(inputAlarmMinutes[1]);
+            ++inputtedAlarm;
+            break;
+          case 3:
+            inputAlarmMinutes = String(inputAlarmMinutes[0]) + String(key);
+            ++inputtedAlarm;
+            break;
+          default:
+            break;
+        }
+      } else if (key == PS2_BACKSPACE) {
+        switch (inputtedAlarm) {
+          case 1:
+            inputAlarmHours = "__";
+            --inputtedAlarm;
+            break;
+          case 2:
+            inputAlarmHours = String(inputAlarmHours[0]) + "_";
+            --inputtedAlarm;
+            break;
+          case 3:
+            inputAlarmMinutes = "__";
+            --inputtedAlarm;
+            break;
+          case 4:
+            inputAlarmMinutes = String(inputAlarmMinutes[0]) + "_";
+            --inputtedAlarm;
+            break;
+          default:
+            break;
+        }
+      } else if (key == PS2_ENTER) {
+        if (inputtedAlarm >= 4) {
+          program_state = STATE::SET_DUR;
+        }
+      }
+      break;
+    case STATE::SET_DUR:
+      if (key == PS2_ESC) {
+        program_state = STATE::SET_ALARM;
+      } else if (key == PS2_UPARROW) {
+        ++inputAlarmDuration;
+      } else if (key == PS2_DOWNARROW) {
+        --inputAlarmDuration;
+      } else if (key == PS2_ENTER && inputAlarmDuration) {
+        if (inputtedAlarm >= 4) {
+          program_state = STATE::SET_DUR;
+          byte index = 0;
+          switch (alarm_state) {
+            case A_STATE::A1:
+              index = 0;
+              break;
+            case A_STATE::A2:
+              index = 1;
+              break;
+            case A_STATE::A3:
+              index = 2;
+              break;
+            case A_STATE::A4:
+              index = 3;
+              break;
+            case A_STATE::A5:
+              index = 4;
+              break;
+          }
+          alarms[index].active = true;
+          alarms[index].hours = inputAlarmHours.toInt();
+          alarms[index].minutes = inputAlarmMinutes.toInt();
+          alarms[index].duration = inputAlarmDuration;
+          resetAlarmInput();
+          program_state = STATE::WAKTU;
         }
       }
       break;
