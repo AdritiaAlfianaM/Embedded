@@ -4,9 +4,6 @@
 #include "Max72xxPanel.h"
 #include "math.h"
 
-#define TIA_CANTIK  Serial.println("Tia Cantik")
-#define TIA_MANIS  Serial.println("Tia Manis")
-
 DS3231 rtc(SDA, SCL);
 
 const byte LDR_PIN = A0; // LDR Sensor pin
@@ -46,7 +43,7 @@ Alarm alarms[] = {
 unsigned long intensityThrottle = 0;
 byte ledIntensity = 0;
 
-enum class STATE{WAKTU, SUHU, MENU, SET_WAKTU, SELECT_ALARM, SET_ALARM, SET_DUR, ALARM_ACTIVE};
+enum class STATE{WAKTU, SUHU, MENU, SET_WAKTU, SELECT_ALARM, SET_ALARM, SET_DUR, ALARM_ACTIVE, SET_ALARM5};
 STATE program_state;
 
 enum class M_STATE{JAM, ALARM};
@@ -59,6 +56,8 @@ String inputAlarmHours = "__";
 String inputAlarmMinutes = "__";
 byte inputAlarmDuration = 0;
 byte inputtedAlarm = 0;
+
+String alarm5Input = "";
 
 byte activeAlarm = 0;
 unsigned long alarmStartTime = 0;
@@ -139,7 +138,11 @@ void setup() {
 }
 
 void printMatrix(String output, int i) {
-  i = i == -1 ? (FONT_WIDTH * output.length() + matrix.width() - 1 - SPACER) / 2 : i; // kalo mau print center i nya kasih -1
+  if (i == -1) { // kalo mau print center i nya kasih -1
+    i = (FONT_WIDTH * output.length() + matrix.width() - 1 - SPACER) / 2;
+  } else if (i == -2) { // kalo mau print rata kanan i nya kasih -1
+    i = FONT_WIDTH * alarm5Input.length() - SPACER;
+  }
   int letter = i / FONT_WIDTH;
   int x = (matrix.width() - 1) - i % FONT_WIDTH;
   int y = (matrix.height() - 8) / 2; // center the text vertically
@@ -183,10 +186,10 @@ void runningMatrix() {
             output += NRP_TIA;
             break;
           case 3:
-            output = String(millis() / 1000) + " s";
+            output = String(alarms[activeAlarm].duration - ((millis() - alarmStartTime) / 1000)) + " s";
             break;
           case 4:
-            output = "I love Tia";
+            output = alarm5Input;
             break;
         }
       }
@@ -210,17 +213,26 @@ void runningMatrix() {
       matrix.fillScreen(LOW);
       return;
     }
-    if ((detik >= 10 && detik < 15) || (detik >= 40 && detik < 45)) {
-      program_state = STATE::SUHU;
-    } else {
-      program_state = STATE::WAKTU;
-    }
 
-    for (byte j = 0; j < 5; ++j) {
-      if (alarms[j].hours == jam && alarms[j].minutes == menit && alarms[j].active) {
-        program_state = STATE::ALARM_ACTIVE;
-        activeAlarm = j;
-        alarmStartTime = millis();
+    if (program_state != STATE::ALARM_ACTIVE) {
+      if ((detik >= 10 && detik < 15) || (detik >= 40 && detik < 45)) {
+        program_state = STATE::SUHU;
+      } else {
+        program_state = STATE::WAKTU;
+      }
+
+      for (byte j = 0; j < 5; ++j) {
+        if (alarms[j].hours == jam && alarms[j].minutes == menit && alarms[j].active) {
+          program_state = STATE::ALARM_ACTIVE;
+          activeAlarm = j;
+          alarmStartTime = millis();
+        }
+      }
+    } else {
+      if (millis() - alarmStartTime > alarms[activeAlarm].duration * 1000) {
+        alarms[activeAlarm].active = false;
+        program_state = STATE::WAKTU;
+        return;
       }
     }
 
@@ -231,6 +243,9 @@ void runningMatrix() {
     if (program_state == STATE::WAKTU) {
       output = outputStrClock();
     }
+    if (program_state == STATE::ALARM_ACTIVE && activeAlarm == 3) {
+      output = String(alarms[activeAlarm].duration - ((millis() - alarmStartTime) / 1000)) + " s";
+    }
     delay(WAIT);
   }
 }
@@ -239,11 +254,22 @@ void loop() {
   matrix.fillScreen(LOW);
   ledIntensitySelect(LDR_PIN);
   matrix.setIntensity(ledIntensity);
+
+  if (program_state == STATE::ALARM_ACTIVE && millis() - alarmStartTime > alarms[activeAlarm].duration * 1000) {
+    alarms[activeAlarm].active = false;
+    program_state = STATE::WAKTU;
+  }
   switch (program_state) {
     case STATE::WAKTU:
     case STATE::SUHU:
-    case STATE::ALARM_ACTIVE:
       runningMatrix();
+      break;
+    case STATE::ALARM_ACTIVE:
+      if (activeAlarm == 3) {
+        printMatrix(String(alarms[activeAlarm].duration - ((millis() - alarmStartTime) / 1000)) + " s", -1);
+      } else {
+        runningMatrix();
+      }
       break;
     case STATE::MENU:
       switch (menu_state) {
@@ -275,6 +301,9 @@ void loop() {
           printMatrix("5", -1);
           break;
       }
+      break;
+    case STATE::SET_ALARM5:
+      printMatrix(alarm5Input, -2);
       break;
     case STATE::SET_ALARM:
       printMatrix(inputAlarmHours + ":" + inputAlarmMinutes, -1);
@@ -360,7 +389,22 @@ void keyboardHandler() {
             break;           
         }
       } else if (key == PS2_ENTER) {
-        program_state = STATE::SET_ALARM;
+        if (alarm_state == A_STATE::A5) {
+          program_state = STATE::SET_ALARM5;
+        } else {
+          program_state = STATE::SET_ALARM;          
+        }
+      }
+      break;
+    case STATE::SET_ALARM5:
+      if (key == PS2_ENTER && alarm5Input.length() > 0) {
+        program_state = STATE::SET_ALARM;        
+      } else if (key == PS2_ESC) {
+        program_state = STATE::SELECT_ALARM;
+      } else if (key == PS2_BACKSPACE && alarm5Input.length() > 0) {
+        alarm5Input.remove(alarm5Input.length() - 1, 1);
+      } else {
+        alarm5Input += String(key);
       }
       break;
     case STATE::SET_ALARM:
@@ -452,5 +496,11 @@ void keyboardHandler() {
         }
       }
       break;
+    case STATE::ALARM_ACTIVE:
+      if (key == PS2_ESC) {
+        program_state = STATE::WAKTU;
+        alarms[activeAlarm].active = false;
+      }
+      break;      
   }
 }

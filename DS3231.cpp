@@ -444,4 +444,3 @@ uint8_t DS3231::_encode(uint8_t value)
 	uint8_t encoded = ((value / 10) << 4) + (value % 10);
 	return encoded;
 }
-
