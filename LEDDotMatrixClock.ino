@@ -296,7 +296,8 @@ void loop() {
       printMatrix(inputTimerMinutes + ":" + inputTimerSeconds, -1);
       break;      
     case STATE::SET_WAKTU:
-      break;
+      printMatrix(inputClockHours + ":" + inputClockMinutes, -1);
+      break;   
     case STATE::SELECT_ALARM:
       switch (alarm_state) {
         case A_STATE::A1:
@@ -405,7 +406,58 @@ void keyboardHandler() {
     case STATE::SET_WAKTU:
       if (key == PS2_ESC) {
         program_state = STATE::MENU;
-      } 
+      } else if (key >= '0' && key <= '9') {
+        switch (inputtedClock) {
+          case 0:
+            inputClockHours = String(key) + String(inputClockHours[1]);
+            ++inputtedClock;
+            break;
+          case 1:
+            inputClockHours = String(inputClockHours[0]) + String(key);
+            ++inputtedClock;
+            break;
+          case 2:
+            inputClockMinutes = String(key) + String(inputClockMinutes[1]);
+            ++inputtedClock;
+            break;
+          case 3:
+            inputClockMinutes = String(inputClockMinutes[0]) + String(key);
+            ++inputtedClock;
+            break;
+          default:
+            break;
+        }
+      } else if (key == PS2_BACKSPACE) {
+        switch (inputtedClock) {
+          case 1:
+            inputClockHours = "__";
+            --inputtedClock;
+            break;
+          case 2:
+            inputClockHours = String(inputClockHours[0]) + "_";
+            --inputtedClock;
+            break;
+          case 3:
+            inputClockMinutes = "__";
+            --inputtedClock;
+            break;
+          case 4:
+            inputClockMinutes = String(inputClockMinutes[0]) + "_";
+            --inputtedClock;
+            break;
+          default:
+            break;
+        }
+      } else if (key == PS2_ENTER) {
+        if (inputtedClock >= 4) {
+          program_state = STATE::WAKTU;
+          byte sec = rtc.getTime().sec;
+          byte hour = inputClockHours.toInt();
+          byte min = inputClockMinutes.toInt();
+          rtc.setTime(hour, min, sec);
+          program_state = STATE::WAKTU;
+        }
+      }
       break;
     case STATE::SELECT_ALARM:
       if (key == PS2_ESC) {
