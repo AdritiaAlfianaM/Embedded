@@ -43,10 +43,10 @@ Alarm alarms[] = {
 unsigned long intensityThrottle = 0;
 byte ledIntensity = 0;
 
-enum class STATE{WAKTU, SUHU, MENU, SET_WAKTU, SELECT_ALARM, SET_ALARM, SET_DUR, ALARM_ACTIVE, SET_ALARM5};
+enum class STATE{WAKTU, SUHU, MENU, SET_TIMER, SET_WAKTU, SELECT_ALARM, SET_ALARM, SET_DUR, ALARM_ACTIVE, TIMER_ACTIVE, SET_ALARM5};
 STATE program_state;
 
-enum class M_STATE{JAM, ALARM};
+enum class M_STATE{JAM, ALARM, TIMER};
 M_STATE menu_state;
 
 enum class A_STATE{A1, A2, A3, A4, A5};
@@ -61,6 +61,15 @@ String alarm5Input = "";
 
 byte activeAlarm = 0;
 unsigned long alarmStartTime = 0;
+unsigned long timerStartTime = 0;
+
+String inputTimerMinutes = "__";
+String inputTimerSeconds = "__";
+byte inputtedTimer = 0;
+
+String inputClockHours = "__";
+String inputClockMinutes = "__";
+byte inputtedClock = 0;
 
 String NRP_TIA = "07211940000017";
 String NAMA_TIA = "Adritia Alfiana Merdila";
@@ -70,7 +79,6 @@ void adjustClock(String data) {
 	byte _min = data.substring(3,5).toInt();
 	byte _sec = data.substring(6,8).toInt();
 	rtc.setTime(_hour, _min, _sec);
-
 	Serial.println(F(">> Time successfully set!"));
 }
 
@@ -279,8 +287,14 @@ void loop() {
         case M_STATE::ALARM:
           printMatrix("ALARM", -1);
           break;
+        case M_STATE::TIMER:
+          printMatrix("TIMER", -1);
+          break;
       }
       break;
+    case STATE::SET_TIMER:
+      printMatrix(inputTimerMinutes + ":" + inputTimerSeconds, -1);
+      break;      
     case STATE::SET_WAKTU:
       break;
     case STATE::SELECT_ALARM:
@@ -311,11 +325,31 @@ void loop() {
     case STATE::SET_DUR:
       printMatrix(String(inputAlarmDuration) + " s", -1);
       break;
+    case STATE::TIMER_ACTIVE:
+      unsigned int seconds = inputTimerMinutes.toInt() * 60 + inputTimerSeconds.toInt();
+      unsigned long timeDiff = millis() - timerStartTime;
+      if (timeDiff > (seconds * 1000)) {
+        program_state = STATE::WAKTU;
+      }
+      unsigned int secsLeft = seconds - (timeDiff / 1000);
+      unsigned int minsLeft = secsLeft / 60;
+      secsLeft -= minsLeft * 60;
+      String minsOutput = String(minsLeft);
+      String secsOutput = String(secsLeft);
+      if (minsOutput.length() < 2) {
+        minsOutput = "0" + minsOutput;
+      }
+      if (secsOutput.length() < 2) {
+        secsOutput = "0" + secsOutput;
+      }
+      printMatrix(minsOutput + ":" + secsOutput, -1);
+      break;
   }
 
   if (Serial.available() > 0) {
     adjustClock(Serial.readString());
   }
+  delay(60);
 }
 
 void keyboardHandler() {
@@ -331,23 +365,47 @@ void keyboardHandler() {
       }
       break;
     case STATE::MENU:
-      if (key == PS2_LEFTARROW || key == PS2_RIGHTARROW) {
-        menu_state = menu_state == M_STATE::ALARM ? M_STATE::JAM : M_STATE::ALARM;
+      if (key == PS2_LEFTARROW) {
+        switch (menu_state) {
+          case M_STATE::JAM:
+            menu_state = M_STATE::TIMER;
+            break;
+          case M_STATE::ALARM:
+            menu_state = M_STATE::JAM;
+            break;
+          case M_STATE::TIMER:
+            menu_state = M_STATE::ALARM;
+            break;
+        }
+      } else if (key == PS2_RIGHTARROW) {
+        switch (menu_state) {
+          case M_STATE::JAM:
+            menu_state = M_STATE::ALARM;
+            break;
+          case M_STATE::ALARM:
+            menu_state = M_STATE::TIMER;
+            break;
+          case M_STATE::TIMER:
+            menu_state = M_STATE::JAM;
+            break;
+        }
       } else if (key == PS2_ESC) {
         menu_state = M_STATE::JAM;
         program_state = STATE::WAKTU;
       } else if (key == PS2_ENTER) {
         if (menu_state == M_STATE::JAM) {
           program_state = STATE::SET_WAKTU;
-        } else {
+        } else if (menu_state == M_STATE::ALARM) {
           program_state = STATE::SELECT_ALARM;
+        } else {
+          program_state = STATE::SET_TIMER;
         }
       }
       break;
     case STATE::SET_WAKTU:
       if (key == PS2_ESC) {
         program_state = STATE::MENU;
-      }
+      } 
       break;
     case STATE::SELECT_ALARM:
       if (key == PS2_ESC) {
@@ -501,6 +559,63 @@ void keyboardHandler() {
         program_state = STATE::WAKTU;
         alarms[activeAlarm].active = false;
       }
-      break;      
+      break;    
+    case STATE::SET_TIMER:
+      if (key == PS2_ESC) {
+        program_state = STATE::MENU;
+      } else if (key >= '0' && key <= '9') {
+        switch (inputtedTimer) {
+          case 0:
+            inputTimerMinutes = String(key) + String(inputTimerMinutes[1]);
+            ++inputtedTimer;
+            break;
+          case 1:
+            inputTimerMinutes = String(inputTimerMinutes[0]) + String(key);
+            ++inputtedTimer;
+            break;
+          case 2:
+            inputTimerSeconds = String(key) + String(inputTimerSeconds[1]);
+            ++inputtedTimer;
+            break;
+          case 3:
+            inputTimerSeconds = String(inputTimerSeconds[0]) + String(key);
+            ++inputtedTimer;
+            break;
+          default:
+            break;
+        }
+      } else if (key == PS2_BACKSPACE) {
+        switch (inputtedTimer) {
+          case 1:
+            inputTimerMinutes = "__";
+            --inputtedTimer;
+            break;
+          case 2:
+            inputTimerMinutes = String(inputTimerMinutes[0]) + "_";
+            --inputtedTimer;
+            break;
+          case 3:
+            inputTimerSeconds = "__";
+            --inputtedTimer;
+            break;
+          case 4:
+            inputTimerSeconds = String(inputTimerSeconds[0]) + "_";
+            --inputtedTimer;
+            break;
+          default:
+            break;
+        }
+      } else if (key == PS2_ENTER) {
+        if (inputtedTimer >= 4) {
+          program_state = STATE::TIMER_ACTIVE;
+          timerStartTime = millis();       
+        }
+      }
+      break;
+    case STATE::TIMER_ACTIVE:
+      if (key == PS2_ESC) {
+        program_state = STATE::WAKTU;
+      }
+      break;
   }
 }
