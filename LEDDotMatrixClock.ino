@@ -409,14 +409,23 @@ void keyboardHandler() {
       } else if (key >= '0' && key <= '9') {
         switch (inputtedClock) {
           case 0:
+            if (key > '2') {
+              break;
+            }
             inputClockHours = String(key) + String(inputClockHours[1]);
             ++inputtedClock;
             break;
           case 1:
+            if (inputClockHours[0] > '1' && key > '3') {
+              break;
+            }
             inputClockHours = String(inputClockHours[0]) + String(key);
             ++inputtedClock;
             break;
           case 2:
+            if (key > '5') {
+              break;
+            }
             inputClockMinutes = String(key) + String(inputClockMinutes[1]);
             ++inputtedClock;
             break;
@@ -524,14 +533,23 @@ void keyboardHandler() {
       } else if (key >= '0' && key <= '9') {
         switch (inputtedAlarm) {
           case 0:
+            if (key > '2') {
+              break;
+            }
             inputAlarmHours = String(key) + String(inputAlarmHours[1]);
             ++inputtedAlarm;
             break;
           case 1:
+            if (inputAlarmHours[0] > '1' && key > '3') {
+              break;
+            }
             inputAlarmHours = String(inputAlarmHours[0]) + String(key);
             ++inputtedAlarm;
             break;
           case 2:
+            if (key > '5') {
+              break;
+            }
             inputAlarmMinutes = String(key) + String(inputAlarmMinutes[1]);
             ++inputtedAlarm;
             break;
@@ -611,7 +629,7 @@ void keyboardHandler() {
         program_state = STATE::WAKTU;
         alarms[activeAlarm].active = false;
       }
-      break;    
+      break;   
     case STATE::SET_TIMER:
       if (key == PS2_ESC) {
         program_state = STATE::MENU;
@@ -626,6 +644,9 @@ void keyboardHandler() {
             ++inputtedTimer;
             break;
           case 2:
+            if (inputTimerMinutes == String("99") && key > '5') {
+              break;
+            }
             inputTimerSeconds = String(key) + String(inputTimerSeconds[1]);
             ++inputtedTimer;
             break;
