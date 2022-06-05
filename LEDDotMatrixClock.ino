@@ -43,7 +43,7 @@ Alarm alarms[] = {
 unsigned long intensityThrottle = 0;
 byte ledIntensity = 0;
 
-enum class STATE{WAKTU, SUHU, MENU, SET_TIMER, SET_WAKTU, SELECT_ALARM, SET_ALARM, SET_DUR, ALARM_ACTIVE, TIMER_ACTIVE, SET_ALARM5};
+enum class STATE{WAKTU, SUHU, MENU, SET_TIMER, SET_WAKTU, SELECT_ALARM, SET_ALARM, SET_DUR, ALARM_ACTIVE, TIMER_ACTIVE, TIMER_DONE, SET_ALARM5};
 STATE program_state;
 
 enum class M_STATE{JAM, ALARM, TIMER};
@@ -62,6 +62,7 @@ String alarm5Input = "";
 byte activeAlarm = 0;
 unsigned long alarmStartTime = 0;
 unsigned long timerStartTime = 0;
+unsigned long timerDoneStartTime;
 
 String inputTimerMinutes = "__";
 String inputTimerSeconds = "__";
@@ -92,7 +93,7 @@ String outputStrTemp() {
 	String _outputtemp;
 	int waktu2 = millis();
 	if (waktu == 0 || (waktu2 - waktu) >= 10000 ) {
-		suhu = (float)analogRead(LM_PIN) / (2.0479 * 7); 
+		suhu = (float)analogRead(LM_PIN) / (2.0479 * 3.5); 
 		waktu = waktu2;
 	}
 	_outputtemp.concat("  ");
@@ -272,14 +273,15 @@ void loop() {
     case STATE::SUHU:
       runningMatrix();
       break;
-    case STATE::ALARM_ACTIVE:
+    case STATE::ALARM_ACTIVE: {
       if (activeAlarm == 3) {
         printMatrix(String(alarms[activeAlarm].duration - ((millis() - alarmStartTime) / 1000)) + " s", -1);
       } else {
         runningMatrix();
       }
       break;
-    case STATE::MENU:
+    }
+    case STATE::MENU: {
       switch (menu_state) {
         case M_STATE::JAM:
           printMatrix("JAM", -1);
@@ -292,13 +294,16 @@ void loop() {
           break;
       }
       break;
-    case STATE::SET_TIMER:
+    }
+    case STATE::SET_TIMER: {
       printMatrix(inputTimerMinutes + ":" + inputTimerSeconds, -1);
       break;      
-    case STATE::SET_WAKTU:
+    }
+    case STATE::SET_WAKTU: {
       printMatrix(inputClockHours + ":" + inputClockMinutes, -1);
       break;   
-    case STATE::SELECT_ALARM:
+    }
+    case STATE::SELECT_ALARM: {
       switch (alarm_state) {
         case A_STATE::A1:
           printMatrix("1", -1);
@@ -317,20 +322,25 @@ void loop() {
           break;
       }
       break;
-    case STATE::SET_ALARM5:
+    }
+    case STATE::SET_ALARM5: {
       printMatrix(alarm5Input, -2);
       break;
-    case STATE::SET_ALARM:
+    }
+    case STATE::SET_ALARM: {
       printMatrix(inputAlarmHours + ":" + inputAlarmMinutes, -1);
       break;
-    case STATE::SET_DUR:
+    }
+    case STATE::SET_DUR: {
       printMatrix(String(inputAlarmDuration) + " s", -1);
       break;
-    case STATE::TIMER_ACTIVE:
-      unsigned int seconds = inputTimerMinutes.toInt() * 60 + inputTimerSeconds.toInt();
+    }
+    case STATE::TIMER_ACTIVE: {
+      unsigned long seconds = inputTimerMinutes.toInt() * 60 + inputTimerSeconds.toInt();
       unsigned long timeDiff = millis() - timerStartTime;
       if (timeDiff > (seconds * 1000)) {
-        program_state = STATE::WAKTU;
+        program_state = STATE::TIMER_DONE;
+        timerDoneStartTime = millis();
       }
       unsigned int secsLeft = seconds - (timeDiff / 1000);
       unsigned int minsLeft = secsLeft / 60;
@@ -345,6 +355,17 @@ void loop() {
       }
       printMatrix(minsOutput + ":" + secsOutput, -1);
       break;
+    }
+    case STATE::TIMER_DONE: {
+      unsigned long timePassed = millis() - timerDoneStartTime;
+      if (timePassed > 3000) {
+        program_state = STATE::WAKTU;
+      }
+
+      String output = (timePassed / 300) & 1 ? "" : "DONE";
+      printMatrix(output, -1);
+      break;
+    }
   }
 
   if (Serial.available() > 0) {
