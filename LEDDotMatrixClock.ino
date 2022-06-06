@@ -1,10 +1,9 @@
-#include "DS3231.h"
-#include "Adafruit_GFX.h"
-#include "PS2Keyboard.h"
-#include "Max72xxPanel.h"
-#include "math.h"
+#include "DS3231.h" // untuk akses rtc
+#include "Adafruit_GFX.h" // nampilin di dot matrix
+#include "PS2Keyboard.h" // buat inputan keyboard
+#include "Max72xxPanel.h" // buat kasi ic font" ke adafruit
 
-DS3231 rtc(SDA, SCL);
+DS3231 rtc(SDA, SCL); // inisalisasi objek rtc
 
 const byte LDR_PIN = A0; // LDR Sensor pin
 const byte CS_PIN = 10; // Attach CS to this pin, DIN to MOSI and CLK to SCK (cf http://arduino.cc/en/Reference/SPI )
@@ -16,10 +15,10 @@ const byte IRQpin = 3; // d+
 
 Max72xxPanel matrix = Max72xxPanel(CS_PIN, H_DISPLAYS, V_DISPLAYS);
 
-PS2Keyboard keyboard;
+PS2Keyboard keyboard; // objek keyboard
 
-const byte WAIT = 60;
-const byte SPACER = 1;
+const byte WAIT = 60; // untuk delay
+const byte SPACER = 1; // jarak antar font
 const byte FONT_WIDTH = 5 + SPACER; // The font width is 5 pixels
 
 int waktu = 0; 
@@ -38,31 +37,31 @@ Alarm alarms[] = {
   { false },
   { false },
   { false }
-};
+}; // nyimpen alarm dalam array
 
-unsigned long intensityThrottle = 0;
+unsigned long intensityThrottle = 0; // biar tidak mengdisko
 byte ledIntensity = 0;
 
 enum class STATE{WAKTU, SUHU, MENU, SET_TIMER, SET_WAKTU, SELECT_ALARM, SET_ALARM, SET_DUR, ALARM_ACTIVE, TIMER_ACTIVE, TIMER_DONE, SET_ALARM5};
-STATE program_state;
+STATE program_state; // ngatur state
 
 enum class M_STATE{JAM, ALARM, TIMER};
-M_STATE menu_state;
+M_STATE menu_state; // ngatur state menu
 
 enum class A_STATE{A1, A2, A3, A4, A5};
-A_STATE alarm_state;
+A_STATE alarm_state; // ngatur state alarm
 
 String inputAlarmHours = "__";
 String inputAlarmMinutes = "__";
 byte inputAlarmDuration = 0;
-byte inputtedAlarm = 0;
+byte inputtedAlarm = 0; // ngitung berapa yg udah diinput
 
-String alarm5Input = "";
+String alarm5Input = ""; 
 
-byte activeAlarm = 0;
+byte activeAlarm = 0; // alarm berapa yg aktif
 unsigned long alarmStartTime = 0;
 unsigned long timerStartTime = 0;
-unsigned long timerDoneStartTime;
+unsigned long timerDoneStartTime; // mulainya string done untuk ditampilkan 
 
 String inputTimerMinutes = "__";
 String inputTimerSeconds = "__";
@@ -72,8 +71,8 @@ String inputClockHours = "__";
 String inputClockMinutes = "__";
 byte inputtedClock = 0;
 
-String NRP_TIA = "07211940000017";
-String NAMA_TIA = "Adritia Alfiana Merdila";
+String NRP = "07211940000017";
+String NAMA = "Adritia Alfiana Merdila";
 
 void adjustClock(String data) {
 	byte _hour = data.substring(0,2).toInt();
@@ -93,9 +92,9 @@ String outputStrTemp() {
 	String _outputtemp;
 	int waktu2 = millis();
 	if (waktu == 0 || (waktu2 - waktu) >= 10000 ) {
-		suhu = (float)analogRead(LM_PIN) / (2.0479 * 3.5); 
+		suhu = (float)analogRead(LM_PIN) / (2.0479 * 7.5); 
 		waktu = waktu2;
-	}
+	} // agar temp mengtidak mengdisko
 	_outputtemp.concat("  ");
 	_outputtemp.concat(suhu);    
 	_outputtemp.concat((char)247);
@@ -113,11 +112,11 @@ byte getLedIntensity(int& light) {
 void ledIntensitySelect(const uint8_t& ldrPin) {
 	unsigned long timeNow = millis();
 
-	if (timeNow - intensityThrottle >= 1000) {
+	//if (timeNow - intensityThrottle >= 1000) {
 		int light = analogRead(ldrPin);
 		ledIntensity = getLedIntensity(light);
 		intensityThrottle = timeNow;
-	}
+	//}
 }
 
 void resetAlarmInput() {
@@ -125,11 +124,11 @@ void resetAlarmInput() {
   inputAlarmHours = "__";
   inputAlarmMinutes = "__";
   inputAlarmDuration = 0;
-}
+} // mereset input alarm, kalo tekan esc terus masuk ke alarmnya jadi __ : __
 
 void setup() {
 	pinMode(LDR_PIN, INPUT_PULLUP);
-  keyboard.begin(DataPin, IRQpin);
+  keyboard.begin(DataPin, IRQpin); // mulai keyboardnya
 	Serial.begin(9600);
 	Serial.println(F(">> Arduino 32x8 LED Dot Matrix Clock!"));
 	Serial.println(F(">> Use <hh:mm:ss> format to set clock's and hour!"));
@@ -141,15 +140,15 @@ void setup() {
 	matrix.setRotation(0, 1);    
 	matrix.setRotation(1, 1);
 	matrix.setRotation(2, 1);
-	matrix.setRotation(3, 1);
+	matrix.setRotation(3, 1); 
 
-  attachInterrupt(digitalPinToInterrupt(DataPin), keyboardHandler, FALLING);
+  attachInterrupt(digitalPinToInterrupt(DataPin), keyboardHandler, FALLING); // memasang interrupt
 }
 
 void printMatrix(String output, int i) {
   if (i == -1) { // kalo mau print center i nya kasih -1
     i = (FONT_WIDTH * output.length() + matrix.width() - 1 - SPACER) / 2;
-  } else if (i == -2) { // kalo mau print rata kanan i nya kasih -1
+  } else if (i == -2) { // kalo mau print rata kanan i nya kasih -2
     i = FONT_WIDTH * alarm5Input.length() - SPACER;
   }
   int letter = i / FONT_WIDTH;
@@ -164,13 +163,13 @@ void printMatrix(String output, int i) {
     x -= FONT_WIDTH;
   }
   matrix.write();
-}
+} // fungsi buat print matrix
 
 void runningMatrix() {
-  STATE prevState = program_state;
+  STATE prevState = program_state; // nyimpan state sebelumnya
   byte detik = rtc.getTime().sec;
   String output;
-  switch (program_state) {
+  switch (program_state) { // buat ngecek state dan menentukan outputnya
     case STATE::WAKTU:
       output = outputStrClock();
       break;
@@ -178,24 +177,24 @@ void runningMatrix() {
       output = outputStrTemp();
       break;
     case STATE::ALARM_ACTIVE:
-      if (millis() - alarmStartTime > alarms[activeAlarm].duration * 1000) {
+      if (millis() - alarmStartTime > alarms[activeAlarm].duration * 1000) { // ngecek alarmnya sudah melebihi durasi atau tidak
         alarms[activeAlarm].active = false;
         program_state = STATE::WAKTU;
         return;
-      } else {
+      } else { // ngecek alarm yg aktif yg mana
         switch (activeAlarm) {
           case 0:
-            output = NRP_TIA;
+            output = NRP;
             break;
           case 1:
-            output = NAMA_TIA;
+            output = NAMA;
             break;
           case 2:
-            output = NAMA_TIA + " ";
-            output += NRP_TIA;
+            output = NRP + " ";
+            output += NAMA;
             break;
           case 3:
-            output = String(alarms[activeAlarm].duration - ((millis() - alarmStartTime) / 1000)) + " s";
+            output = String(alarms[activeAlarm].duration - ((millis() - alarmStartTime) / 1000)) + " s"; // output durasi terus countdown
             break;
           case 4:
             output = alarm5Input;
@@ -203,10 +202,10 @@ void runningMatrix() {
         }
       }
       break;
-    default:
+    default: // ketika ngga ada di switch masuk return
       return;
   }
-  for ( int i = 0 ; i < FONT_WIDTH * output.length() + matrix.width() - 1 - SPACER; i++ ) {
+  for ( int i = 0 ; i < FONT_WIDTH * output.length() + matrix.width() - 1 - SPACER; i++ ) { // ngatur posisi print
 		ledIntensitySelect(LDR_PIN);
   	matrix.setIntensity(ledIntensity); // value between 0 and 15 for brightness
     matrix.fillScreen(LOW);
@@ -218,7 +217,7 @@ void runningMatrix() {
     byte menit = rtc.getTime().min;
     byte jam = rtc.getTime().hour;
 
-    if (prevState != program_state) {
+    if (prevState != program_state) { // kalo state berubah karena interrupt do
       matrix.fillScreen(LOW);
       return;
     }
@@ -230,7 +229,7 @@ void runningMatrix() {
         program_state = STATE::WAKTU;
       }
 
-      for (byte j = 0; j < 5; ++j) {
+      for (byte j = 0; j < 5; ++j) { // mengecek apa ada alarm aktif di waktu itu
         if (alarms[j].hours == jam && alarms[j].minutes == menit && alarms[j].active) {
           program_state = STATE::ALARM_ACTIVE;
           activeAlarm = j;
@@ -238,37 +237,37 @@ void runningMatrix() {
         }
       }
     } else {
-      if (millis() - alarmStartTime > alarms[activeAlarm].duration * 1000) {
+      if (millis() - alarmStartTime > alarms[activeAlarm].duration * 1000) { // ngecek alarmnya sudah melebihi durasi atau tidak
         alarms[activeAlarm].active = false;
         program_state = STATE::WAKTU;
         return;
       }
     }
 
-    if (prevState != program_state) {
+    if (prevState != program_state) { // kalo state berubah karena interrupt do
       matrix.fillScreen(LOW);
       return;
     }
     if (program_state == STATE::WAKTU) {
       output = outputStrClock();
     }
-    if (program_state == STATE::ALARM_ACTIVE && activeAlarm == 3) {
+    if (program_state == STATE::ALARM_ACTIVE && activeAlarm == 3) { // supaya detiknya keupdate
       output = String(alarms[activeAlarm].duration - ((millis() - alarmStartTime) / 1000)) + " s";
     }
     delay(WAIT);
   }
-}
+} // fungsi running text
 
 void loop() {
-  matrix.fillScreen(LOW);
-  ledIntensitySelect(LDR_PIN);
-  matrix.setIntensity(ledIntensity);
+  matrix.fillScreen(LOW); // clear matrix
+  ledIntensitySelect(LDR_PIN); // menentukan
+  matrix.setIntensity(ledIntensity); // di apply ke matrix
 
-  if (program_state == STATE::ALARM_ACTIVE && millis() - alarmStartTime > alarms[activeAlarm].duration * 1000) {
+  if (program_state == STATE::ALARM_ACTIVE && millis() - alarmStartTime > alarms[activeAlarm].duration * 1000) { // ngecek alarmnya sudah melebihi durasi atau tidak
     alarms[activeAlarm].active = false;
     program_state = STATE::WAKTU;
   }
-  switch (program_state) {
+  switch (program_state) { // kalo di loop buat cek state
     case STATE::WAKTU:
     case STATE::SUHU:
       runningMatrix();
@@ -337,14 +336,14 @@ void loop() {
     }
     case STATE::TIMER_ACTIVE: {
       unsigned long seconds = inputTimerMinutes.toInt() * 60 + inputTimerSeconds.toInt();
-      unsigned long timeDiff = millis() - timerStartTime;
-      if (timeDiff > (seconds * 1000)) {
+      unsigned long timeDiff = millis() - timerStartTime; // waktu sekarang - waktu mulai timer (durasi)
+      if (timeDiff > (seconds * 1000)) { // buat ngecek timer selesai
         program_state = STATE::TIMER_DONE;
         timerDoneStartTime = millis();
       }
-      unsigned int secsLeft = seconds - (timeDiff / 1000);
-      unsigned int minsLeft = secsLeft / 60;
-      secsLeft -= minsLeft * 60;
+      unsigned int secsLeft = seconds - (timeDiff / 1000); //sisa detik
+      unsigned int minsLeft = secsLeft / 60; // sisa menit tapi detiknya masi kaya awal
+      secsLeft -= minsLeft * 60; // penyesuaian detik 
       String minsOutput = String(minsLeft);
       String secsOutput = String(secsLeft);
       if (minsOutput.length() < 2) {
@@ -362,7 +361,7 @@ void loop() {
         program_state = STATE::WAKTU;
       }
 
-      String output = (timePassed / 300) & 1 ? "" : "DONE";
+      String output = (timePassed / 300) & 1 ? "" : "SUDAH"; // delay blink sudah
       printMatrix(output, -1);
       break;
     }
@@ -374,11 +373,11 @@ void loop() {
   delay(60);
 }
 
-void keyboardHandler() {
+void keyboardHandler() { // untuk interrupt keyboard
   if (!keyboard.available()) {
     return;    
   }
-  char key = keyboard.read();
+  char key = keyboard.read(); 
   switch(program_state) {
     case STATE::WAKTU:
     case STATE::SUHU:    
@@ -430,9 +429,9 @@ void keyboardHandler() {
       } else if (key >= '0' && key <= '9') {
         switch (inputtedClock) {
           case 0:
-            if (key > '2') {
+            if (key > '2') { // biar jam awal tidak lebih dari 2
               break;
-            }
+            }// _ _ -> 1 _
             inputClockHours = String(key) + String(inputClockHours[1]);
             ++inputtedClock;
             break;
@@ -440,6 +439,7 @@ void keyboardHandler() {
             if (inputClockHours[0] > '1' && key > '3') {
               break;
             }
+            // 1 _ -> 1 9
             inputClockHours = String(inputClockHours[0]) + String(key);
             ++inputtedClock;
             break;
@@ -458,6 +458,7 @@ void keyboardHandler() {
             break;
         }
       } else if (key == PS2_BACKSPACE) {
+        // 19 23 -> inputtedClock = 4        
         switch (inputtedClock) {
           case 1:
             inputClockHours = "__";
@@ -480,7 +481,6 @@ void keyboardHandler() {
         }
       } else if (key == PS2_ENTER) {
         if (inputtedClock >= 4) {
-          program_state = STATE::WAKTU;
           byte sec = rtc.getTime().sec;
           byte hour = inputClockHours.toInt();
           byte min = inputClockMinutes.toInt();
@@ -619,7 +619,7 @@ void keyboardHandler() {
         if (inputtedAlarm >= 4) {
           program_state = STATE::SET_DUR;
           byte index = 0;
-          switch (alarm_state) {
+          switch (alarm_state) { // buat tau index mana alarm yg aktif 
             case A_STATE::A1:
               index = 0;
               break;
