@@ -2,6 +2,7 @@
 #include "Adafruit_GFX.h" // nampilin di dot matrix
 #include "PS2Keyboard.h" // buat inputan keyboard
 #include "Max72xxPanel.h" // buat kasi ic font" ke adafruit
+#include "math.h"
 
 DS3231 rtc(SDA, SCL); // inisalisasi objek rtc
 
@@ -90,10 +91,13 @@ String outputStrClock() {
 
 String outputStrTemp() {
 	String _outputtemp;
+  float suhurtc = rtc.getTemp();
 	int waktu2 = millis();
-	if (waktu == 0 || (waktu2 - waktu) >= 10000 ) {
-		suhu = (float)analogRead(LM_PIN) / (2.0479 * 7.5); 
-		waktu = waktu2;
+	if (waktu == 0 || (waktu2 - waktu) >= 1000 ) {
+    do {
+      suhu = abs(((float)analogRead(LM_PIN) / (2.0479))); 
+      waktu = waktu2;
+    } while (abs(suhurtc - suhu) > 2);
 	} // agar temp mengtidak mengdisko
 	_outputtemp.concat("  ");
 	_outputtemp.concat(suhu);    
@@ -606,6 +610,31 @@ void keyboardHandler() { // untuk interrupt keyboard
         if (inputtedAlarm >= 4) {
           program_state = STATE::SET_DUR;
         }
+      } else if (key == PS2_BACKSPACE) {
+        byte index;
+        switch (alarm_state) {
+          case A_STATE::A1: {
+            index = 0;
+            break;
+          }
+          case A_STATE::A2: {
+            index = 1;
+            break;
+          }
+          case A_STATE::A3: {
+            index = 2;
+            break;
+          }
+          case A_STATE::A4: {
+            index = 3;
+            break;
+          }
+          case A_STATE::A5: {
+            index = 4;
+            break;
+          }
+        }
+        alarms[index].active = false;
       }
       break;
     case STATE::SET_DUR:
